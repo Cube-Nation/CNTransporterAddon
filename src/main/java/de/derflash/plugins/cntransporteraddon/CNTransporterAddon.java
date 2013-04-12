@@ -60,6 +60,21 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
     	getServer().getScheduler().runTaskTimerAsynchronously(this, newAsyncGatesCheckThread(), 600L, 600L);
 		Bukkit.getMessenger().registerOutgoingPluginChannel(this, "cnt_summon");
+		
+		getServer().getScheduler().runTaskLater(this, new Thread() {
+            @Override
+            public void run() {
+                API api = getTransporterAPI();
+                if (api != null) {
+                    Iterator<LocalGate> gates = api.getLocalGates().iterator();
+                    while (gates.hasNext()) {
+                        final LocalGateImpl gate = (LocalGateImpl) gates.next();
+                        getLogger().info("[FixStart] Closing gate: " + gate.getName());
+                        gate.close();
+                    }
+                }
+            }
+		}, 30 * 20L);
     }
     
     
@@ -135,7 +150,7 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
         	
         	// now
         	if (args.length > 0 && args[0].equalsIgnoreCase("!")) {
-				sendAllToFallbackServer();
+//				sendAllToFallbackServer();
 				restartServerIn5();
         		
 	        // default
@@ -143,7 +158,7 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
         		getServer().broadcastMessage(ChatColor.RED + "Achtung! Der Server wird in 30 Sekunden neu gestartet. Du wirst vorher automatisch zum CNa Hub teleportiert...");
 
             	getServer().getScheduler().runTaskLater(this, new Thread() { public void run() {
-    					sendAllToFallbackServer();
+//    					sendAllToFallbackServer();
     					restartServerIn5();
     			}}, 30*20L);
 
@@ -152,14 +167,14 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
         } else if (subCmd.equalsIgnoreCase("stop") && (!(sender instanceof Player) || sender.hasPermission("CNTransporter.halt"))) {
         	
         	if (args.length > 0 && args[0].equalsIgnoreCase("!")) {
-				sendAllToFallbackServer();
+//				sendAllToFallbackServer();
 				shutdownServerIn5();
 
         	} else { 
         		getServer().broadcastMessage(ChatColor.RED + "Achtung! Der Server wird in 30 Sekunden gestoppt. Du wirst vorher automatisch zum CNa Hub teleportiert...");
         		
             	getServer().getScheduler().runTaskLater(this, new Thread() { public void run() {
-    					sendAllToFallbackServer();
+//    					sendAllToFallbackServer();
     					shutdownServerIn5();
     			}}, 30*20L);
         	}
@@ -227,6 +242,7 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
 				    while (gates.hasNext()) {
 				    	final LocalGateImpl gate = (LocalGateImpl) gates.next();
 				    	if (gate.getLinks() == null || gate.getLinks().size() == 0) continue;
+				    	
 				    	if (gate.isOpen()) continue;
 
 				    	String link = gate.getLinks().get(0);
@@ -292,7 +308,7 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
 			}
 		}
     }
-    
+
     public synchronized void setStatus(boolean status, String serverName) {
     	getLogger().info("Setting gate status for " + serverName + ": " + status);
 
