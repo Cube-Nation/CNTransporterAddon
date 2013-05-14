@@ -6,17 +6,19 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.concurrent.Callable;
 
-import net.minecraft.server.v1_5_R2.EntityPlayer;
-import net.minecraft.server.v1_5_R2.PlayerInteractManager;
+import net.minecraft.server.v1_5_R3.EntityPlayer;
+import net.minecraft.server.v1_5_R3.PlayerInteractManager;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Chunk;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.craftbukkit.v1_5_R2.CraftServer;
-import org.bukkit.craftbukkit.v1_5_R2.CraftWorld;
+import org.bukkit.craftbukkit.v1_5_R3.CraftServer;
+import org.bukkit.craftbukkit.v1_5_R3.CraftWorld;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -253,8 +255,19 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
 				    	//getLogger().info("Gate: " + gate.getName() + " Linked: " + gate.isLinked() + " Open: " + gate.isOpen() + " Autoopen: " + autoOpen);
 				    	
 				    	getLogger().info("(Re)Opening auto gate: " + gate.getName());
+				    	
+
 				    	try {
-				    		getServer().getScheduler().callSyncMethod(CNTransporterAddon.p, new Callable<Object>() {
+                            Chunk chunkAtGate = new Location(gate.getWorld(), gate.getCenter().getBlockX(), gate.getCenter().getBlockY(), gate.getCenter().getBlockZ()).getChunk();
+                            if (!chunkAtGate.isLoaded()) {
+                                getLogger().info("-> Loading chunk!");
+                                chunkAtGate.load();
+                            }
+                        } catch (Exception e) {
+                        }
+
+                        try {
+                            getServer().getScheduler().callSyncMethod(CNTransporterAddon.p, new Callable<Object>() {
 								public Object call() throws Exception {
 									gate.open();
 									return null;
