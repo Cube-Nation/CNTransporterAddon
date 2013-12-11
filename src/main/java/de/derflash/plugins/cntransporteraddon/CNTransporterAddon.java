@@ -2,12 +2,15 @@ package de.derflash.plugins.cntransporteraddon;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.concurrent.Callable;
+import java.util.logging.Level;
 
-import net.minecraft.server.v1_5_R3.EntityPlayer;
-import net.minecraft.server.v1_5_R3.PlayerInteractManager;
+import net.minecraft.server.v1_7_R1.EntityPlayer;
+import net.minecraft.server.v1_7_R1.PlayerInteractManager;
+import net.minecraft.util.com.mojang.authlib.GameProfile;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -17,11 +20,13 @@ import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.craftbukkit.v1_5_R3.CraftServer;
-import org.bukkit.craftbukkit.v1_5_R3.CraftWorld;
+import org.bukkit.craftbukkit.v1_7_R1.CraftServer;
+import org.bukkit.craftbukkit.v1_7_R1.CraftWorld;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -34,25 +39,51 @@ import com.frdfsnlght.transporter.api.RemoteServer;
 import com.frdfsnlght.transporter.api.event.LocalGateClosedEvent;
 import com.frdfsnlght.transporter.api.event.LocalGateOpenedEvent;
 import com.frdfsnlght.transporter.api.event.RemoteServerDisconnectEvent;
-import com.google.common.collect.Sets;
-
+import com.onarandombox.MultiverseCore.MultiverseCore;
+import com.sk89q.worldedit.CuboidClipboard;
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.MaxChangedBlocksException;
-import com.sk89q.worldedit.blocks.BaseBlock;
-import com.sk89q.worldedit.blocks.BlockID;
 import com.sk89q.worldedit.bukkit.BukkitWorld;
-import com.sk89q.worldedit.regions.CuboidRegion;
-import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
-import com.sk89q.worldguard.protection.managers.RegionManager;
-import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import com.sk89q.worldedit.data.DataException;
 
 public class CNTransporterAddon extends JavaPlugin implements Listener {
 	
 	static CNTransporterAddon p;
+	MultiverseCore core;
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onLogin(PlayerLoginEvent event) {
+        if (getServer().getServerName().toLowerCase().indexOf("hub") == -1) return;
+        
+        final Player player = event.getPlayer();
+        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
+            public void run() {
+                if (player.isOnline()) {
+                    core.getSafeTTeleporter().safelyTeleport(getServer().getConsoleSender(), player, core.getMVWorldManager().getSpawnWorld().getSpawnLocation(), false);
+                    getLogger().info("Teleporting " + player.getName() + " to spawn");
+                    
+                }
+            }});
+        
+        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
+            public void run() {
+                if (player.isOnline()) {
+                    player.setWalkSpeed(0.5f);
+                }
+            }}, 20L);
+
+    }
 
 	
     public void onEnable() {
     	CNTransporterAddon.p = this;
+    	
+        this.core = (MultiverseCore) getServer().getPluginManager().getPlugin("Multiverse-Core");
+        if (this.core == null) {
+            getLogger().info("Multiverse-Core not found, will keep looking.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
     	
     	ConfigurationSection config = getConfig().getConfigurationSection("gates");
     	if (config != null) {
@@ -132,7 +163,7 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
 	        	// somebody needs to run this command ;-)
     	        CraftServer cServer = (CraftServer) getServer();
     	        CraftWorld cWorld = (CraftWorld) getServer().getWorlds().get(0);
-    	        EntityPlayer fakeEntityPlayer = new EntityPlayer(cServer.getHandle().getServer(), cWorld.getHandle(), "Restarter", new PlayerInteractManager(cWorld.getHandle()));
+    	        EntityPlayer fakeEntityPlayer = new EntityPlayer(cServer.getHandle().getServer(), cWorld.getHandle(), new GameProfile("randID", "randName"), new PlayerInteractManager(cWorld.getHandle()));
     	        Player restarter = (Player) fakeEntityPlayer.getBukkitEntity();
     	        
     	        restarter.performCommand("stopwrapper admin:blacna");
@@ -257,18 +288,17 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
 				    	getLogger().info("(Re)Opening auto gate: " + gate.getName());
 				    	
 
-				    	try {
-                            Chunk chunkAtGate = new Location(gate.getWorld(), gate.getCenter().getBlockX(), gate.getCenter().getBlockY(), gate.getCenter().getBlockZ()).getChunk();
-                            if (!chunkAtGate.isLoaded()) {
-                                getLogger().info("-> Loading chunk!");
-                                chunkAtGate.load();
-                            }
-                        } catch (Exception e) {
-                        }
-
                         try {
                             getServer().getScheduler().callSyncMethod(CNTransporterAddon.p, new Callable<Object>() {
 								public Object call() throws Exception {
+			                        try {
+			                            Chunk chunkAtGate = new Location(gate.getWorld(), gate.getCenter().getBlockX(), gate.getCenter().getBlockY(), gate.getCenter().getBlockZ()).getChunk();
+			                            if (!chunkAtGate.isLoaded()) {
+			                                getLogger().info("-> Loading chunk!");
+			                                chunkAtGate.load();
+			                            }
+			                        } catch (Exception e) {}
+			                        
 									gate.open();
 									return null;
 								}
@@ -324,16 +354,23 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
 
     public synchronized void setStatus(boolean status, String serverName) {
     	getLogger().info("Setting gate status for " + serverName + ": " + status);
+    	
+        File cf = new File(getDataFolder(), serverName + "_" + (status ? "on" : "off") + ".schematic");
+        
+        if (!cf.exists()) {
+            getLogger().warning("Schematic does not exist: " + cf);
+            return;
+        }
 
     	ConfigurationSection config = getConfig().getConfigurationSection("gates." + serverName);
-    	if (config == null) return;
+    	if (config == null) {
+            getLogger().warning("No config found");
+    	    return;
+    	}
     	
-    	String worldName = config.getString("world");
-    	String portalRegionName = config.getString("portalRegion");
-    	String labelRegionName = config.getString("labelRegion");
     	String portalTitle = config.getString("portalTitle");
     	
-    	if (worldName == null || portalRegionName == null || labelRegionName == null) {
+    	if (portalTitle == null) {
     		getLogger().warning("Error in config");
     		return;
     	}
@@ -344,37 +381,34 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
     		return;
 		}
 		
-		World world = Bukkit.getWorld(worldName);
-		WorldGuardPlugin wg = ((WorldGuardPlugin)p);
-    	RegionManager rm = wg.getRegionManager(world);
+		World world = Bukkit.getWorld("hub");
 		EditSession session = new EditSession(new BukkitWorld(world), 1500000);
-    	
-		ProtectedRegion labelRegion = rm.getRegion(labelRegionName);
-		CuboidRegion labelRegionC = new CuboidRegion(labelRegion.getMinimumPoint(), labelRegion.getMaximumPoint());
-
-		ProtectedRegion portalRegion = rm.getRegion(portalRegionName);
-		if (portalRegion == null) {
-    		getLogger().warning("WorldGuard region '" + portalRegionName + "' not found");
-    		return;
-		}
 		
-		CuboidRegion portalRegionC = new CuboidRegion(portalRegion.getMinimumPoint(), portalRegion.getMaximumPoint());
-		try {
-			session.replaceBlocks(labelRegionC, Sets.newHashSet(new BaseBlock(status ? 152 : 133)), new BaseBlock(status ? 133 : 152));
+        CuboidClipboard clipboard = null;
+        try {
+            
+            clipboard = CuboidClipboard.loadSchematic(cf);
+        } catch (DataException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+	        
+        if (clipboard == null) {
+            getLogger().log(Level.WARNING, "Schematic zu " + serverName + " konnte nicht geladen werden");
+            return;
+        }
 
-			session.replaceBlocks(labelRegionC, Sets.newHashSet(new BaseBlock(status ? BlockID.BEDROCK : BlockID.REDSTONE_LAMP_ON)), new BaseBlock(status ? BlockID.REDSTONE_LAMP_ON : BlockID.BEDROCK));
-			session.replaceBlocks(labelRegionC, Sets.newHashSet(new BaseBlock(status ? 88 : 89)), new BaseBlock(status ? 89 : 88));
+        try {
+            clipboard.paste(session, clipboard.getOrigin().subtract(clipboard.getOffset()), false);
+            
+        } catch (MaxChangedBlocksException e) {
+            getLogger().log(Level.INFO, "Schematic von " + serverName  + " nicht wiederhergestellt werden");
+            e.printStackTrace();
+            return;
+        }
 
-			session.replaceBlocks(portalRegionC, Sets.newHashSet(new BaseBlock(status ? BlockID.BEDROCK : BlockID.REDSTONE_LAMP_ON)), new BaseBlock(status ? BlockID.REDSTONE_LAMP_ON : BlockID.BEDROCK));
-			session.replaceBlocks(portalRegionC, Sets.newHashSet(new BaseBlock(status ? 88 : 89)), new BaseBlock(status ? 89 : 88));
-			
-			session.flushQueue();
-			
-		} catch (MaxChangedBlocksException e) {
-			e.printStackTrace();
-		}
-		
-		getServer().broadcastMessage(ChatColor.AQUA + "Portal " + (status ? ChatColor.GREEN + "geöffnet" : ChatColor.RED + "geschlossen") + ChatColor.AQUA + ": " + ChatColor.DARK_AQUA + portalTitle);
+        getServer().broadcastMessage(ChatColor.AQUA + "Portal " + (status ? ChatColor.GREEN + "geöffnet" : ChatColor.RED + "geschlossen") + ChatColor.AQUA + ": " + ChatColor.DARK_AQUA + portalTitle);
 
     }
     
