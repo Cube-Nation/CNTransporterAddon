@@ -53,37 +53,47 @@ public class CNTransporterAddon extends JavaPlugin implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onLogin(PlayerLoginEvent event) {
-        if (getServer().getServerName().toLowerCase().indexOf("hub") == -1) return;
-        
-        final Player player = event.getPlayer();
-        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
-            public void run() {
-                if (player.isOnline()) {
-                    core.getSafeTTeleporter().safelyTeleport(getServer().getConsoleSender(), player, core.getMVWorldManager().getSpawnWorld().getSpawnLocation(), false);
-                    getLogger().info("Teleporting " + player.getName() + " to spawn");
-                    
-                }
-            }});
-        
-        getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
-            public void run() {
-                if (player.isOnline()) {
-                    player.setWalkSpeed(0.5f);
-                }
-            }}, 20L);
+        if (getServer().getServerName().toLowerCase().indexOf("hub") != -1) {
 
+            final Player player = event.getPlayer();
+            
+            if (mvCore() != null) {
+                getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
+                    public void run() {
+                        if (player.isOnline()) {
+                            mvCore().getSafeTTeleporter().safelyTeleport(getServer().getConsoleSender(), player, mvCore().getMVWorldManager().getSpawnWorld().getSpawnLocation(), false);
+                            getLogger().info("Teleporting " + player.getName() + " to spawn");
+                            
+                        }
+                    }});            
+            }
+            
+            getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
+                public void run() {
+                    if (player.isOnline()) {
+                        player.setWalkSpeed(0.5f);
+                    }
+                }}, 20L);
+            
+        }
+        
     }
 
+    public MultiverseCore mvCore() {
+        if (this.core == null) {
+            this.core = (MultiverseCore) getServer().getPluginManager().getPlugin("Multiverse-Core");
+        }
+        if (this.core == null) {
+            getLogger().info("Multiverse-Core not found, will keep looking....");
+            return null;
+        }
+        return this.core;
+    }
 	
     public void onEnable() {
     	CNTransporterAddon.p = this;
     	
-        this.core = (MultiverseCore) getServer().getPluginManager().getPlugin("Multiverse-Core");
-        if (this.core == null) {
-            getLogger().info("Multiverse-Core not found, will keep looking.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
+    	mvCore();
     	
     	ConfigurationSection config = getConfig().getConfigurationSection("gates");
     	if (config != null) {
